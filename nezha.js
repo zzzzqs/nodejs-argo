@@ -1,12 +1,14 @@
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
+const tls = require('tls')
+const crypto = require('crypto')
 const axios = require('axios')
 const unzipper = require('unzipper')
 const { promisify } = require('util')
 const exec = promisify(require('child_process').exec)
 
-const { FILE_PATH, UUID, NEZHA_SERVER, NEZHA_KEY, NEZHA_TLS, npmPath, nezhaConfigPath } = require('./config')
+const { FILE_PATH, UUID, NEZHA_SERVER, NEZHA_KEY, ARGO_DOMAIN, npmPath, nezhaConfigPath, nezhaLogPath } = require('./config')
 
 function detectPlatform() {
 	// Nezha release asset naming uses: linux / darwin / freebsd / windows
@@ -74,8 +76,81 @@ async function extractZipToDir(zipPath, destDir) {
 		.promise()
 }
 
-function writeNezhaYamlConfig() {
-	const nezhaUuid = process.env.NEZHA_UUID || UUID
+function parseNezhaServer(server) {
+	const normalized = /^https?:\/\//i.test(server) ? server : `https://${server}`
+	const endpoint = new URL(normalized)
+	return {
+		host: endpoint.hostname,
+		port: Number(endpoint.port) || 443
+	}
+}
+
+async function detectNezhaTls(server) {
+	if (!server) return false
+
+	let target
+	try {
+		target = parseNezhaServer(server)
+	} catch {
+		return false
+	}
+
+	return new Promise((resolve) => {
+		let settled = false
+		const finish = (result) => {
+			if (settled) return
+			settled = true
+			if (!socket.destroyed) socket.destroy()
+			resolve(result)
+		}
+
+		const socket = tls.connect(
+			{
+				host: target.host,
+				port: target.port,
+				servername: target.host,
+				rejectUnauthorized: false
+			},
+			() => finish(true)
+		)
+
+		socket.setTimeout(5000, () => finish(false))
+		socket.on('error', () => finish(false))
+	})
+}
+
+function resolveMachineCode() {
+	const candidatePaths = ['/etc/machine-id', '/var/lib/dbus/machine-id', '/sys/class/dmi/id/product_uuid']
+	for (const p of candidatePaths) {
+		try {
+			const content = fs.readFileSync(p, 'utf8').trim()
+			if (content) return `${p}:${content}`
+		} catch {}
+	}
+	return `fallback:${os.hostname()}|${os.platform()}|${os.arch()}`
+}
+
+function hashSeedToUuid(seed) {
+	const digest = crypto.createHash('sha256').update(seed).digest()
+	const bytes = Buffer.from(digest.subarray(0, 16))
+	bytes[6] = (bytes[6] & 0x0f) | 0x40
+	bytes[8] = (bytes[8] & 0x3f) | 0x80
+	const hex = bytes.toString('hex')
+	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
+function resolveNezhaUuid() {
+	if (process.env.NEZHA_UUID) return { uuid: process.env.NEZHA_UUID, source: 'env' }
+
+	const domain = String(ARGO_DOMAIN || '').trim().toLowerCase()
+	if (domain) return { uuid: hashSeedToUuid(`argo-domain:${domain}`), source: 'argo-domain' }
+
+	const machineCode = resolveMachineCode()
+	return { uuid: hashSeedToUuid(`machine:${machineCode}`), source: 'machine-code' }
+}
+
+function writeNezhaYamlConfig(tlsEnabled) {
+	const { uuid: nezhaUuid, source } = resolveNezhaUuid()
 
 	// 按你的模板写入，关键字段用环境变量填充
 	const yml = `client_secret: ${NEZHA_KEY}
@@ -93,13 +168,14 @@ server: ${NEZHA_SERVER}
 skip_connection_count: false
 skip_procs_count: false
 temperature: false
-tls: ${NEZHA_TLS ? 'true' : 'false'}
+tls: ${tlsEnabled ? 'true' : 'false'}
 use_gitee_to_upgrade: false
 use_ipv6_country_code: false
 uuid: ${nezhaUuid}
 `
 
 	fs.writeFileSync(nezhaConfigPath, yml)
+	return { nezhaUuid, source }
 }
 
 async function ensureExecutable(p) {
@@ -145,9 +221,13 @@ async function startNezhaAgent() {
 		await fs.promises.copyFile(found, npmPath)
 		await ensureExecutable(npmPath)
 
-		writeNezhaYamlConfig()
+		const tlsEnabled = await detectNezhaTls(NEZHA_SERVER)
+		const { nezhaUuid, source } = writeNezhaYamlConfig(tlsEnabled)
+		fs.appendFileSync(nezhaLogPath, `\n[${new Date().toISOString()}] starting nezha-agent, tls=${tlsEnabled}, uuid=${nezhaUuid}, uuidSource=${source}\n`)
+		console.log(`哪吒 TLS 自动判定：${tlsEnabled}`)
+		console.log(`哪吒 UUID：${nezhaUuid}（来源：${source}）`)
 
-		const cmd = `nohup ${npmPath} --config ${nezhaConfigPath} >/dev/null 2>&1 &`
+		const cmd = `nohup "${npmPath}" --config "${nezhaConfigPath}" >> "${nezhaLogPath}" 2>&1 &`
 		await exec(cmd)
 		console.log(`哪吒 Agent 已启动`, `命令：${cmd}`)
 	} finally {

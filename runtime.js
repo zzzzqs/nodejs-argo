@@ -10,10 +10,11 @@ const {
 	PROJECT_URL,
 	AUTO_ACCESS,
 	FILE_PATH,
+	SUB_PATH,
+	PORT,
 	UUID,
 	NEZHA_SERVER,
 	NEZHA_KEY,
-	NEZHA_TLS,
 	ARGO_DOMAIN,
 	ARGO_AUTH,
 	ARGO_PORT,
@@ -102,6 +103,7 @@ async function generateConfig() {
 					decryption: 'none',
 					fallbacks: [
 						{ dest: 3001 },
+						{ path: `/${SUB_PATH}`, dest: Number(PORT) },
 						{ path: '/vless-argo', dest: 3002 },
 						{ path: '/vmess-argo', dest: 3003 },
 						{ path: '/trojan-argo', dest: 3004 }

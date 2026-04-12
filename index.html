@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hello Word</title>
+  <style>
+    :root {
+      --bg-0: #06080f;
+      --bg-1: #0d1220;
+      --bg-2: #121a30;
+      --glass: rgba(156, 199, 255, 0.1);
+      --line: rgba(138, 173, 255, 0.16);
+      --text: #e9f1ff;
+      --accent: #84c4ff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at 20% 20%, #17213f 0%, transparent 40%),
+                  radial-gradient(circle at 82% 12%, #1b3457 0%, transparent 35%),
+                  linear-gradient(150deg, var(--bg-0), var(--bg-1) 55%, var(--bg-2));
+      color: var(--text);
+      font-family: "Segoe UI", "SF Pro Display", "Helvetica Neue", sans-serif;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: -20%;
+      background:
+        linear-gradient(var(--line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--line) 1px, transparent 1px);
+      background-size: 56px 56px;
+      opacity: 0.45;
+      transform: perspective(700px) rotateX(52deg) translateY(18%);
+      transform-origin: center center;
+      animation: drift 22s linear infinite;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at center, transparent 35%, rgba(3, 5, 10, 0.72) 100%);
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    .scene {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: grid;
+      place-items: center;
+      z-index: 2;
+      isolation: isolate;
+    }
+
+    .blob {
+      position: absolute;
+      width: min(42vw, 420px);
+      aspect-ratio: 1 / 1;
+      border-radius: 42% 58% 63% 37% / 38% 41% 59% 62%;
+      filter: blur(2px);
+      mix-blend-mode: screen;
+      opacity: 0.72;
+      animation: morph 11s ease-in-out infinite alternate;
+    }
+
+    .blob.a {
+      background: radial-gradient(circle at 30% 20%, rgba(119, 183, 255, 0.88), rgba(43, 88, 166, 0.08));
+      left: 14%;
+      top: 18%;
+      animation-delay: -2s;
+    }
+
+    .blob.b {
+      background: radial-gradient(circle at 65% 35%, rgba(135, 226, 255, 0.72), rgba(12, 45, 120, 0.06));
+      right: 14%;
+      bottom: 14%;
+      animation-duration: 13s;
+    }
+
+    .glass {
+      position: relative;
+      width: min(90vw, 1100px);
+      height: min(62vh, 520px);
+      border: 1px solid rgba(167, 208, 255, 0.26);
+      border-radius: 30px;
+      background: linear-gradient(145deg, rgba(124, 182, 255, 0.18), rgba(124, 182, 255, 0.03));
+      box-shadow: 0 26px 60px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(208, 230, 255, 0.22);
+      backdrop-filter: blur(18px) saturate(120%);
+      -webkit-backdrop-filter: blur(18px) saturate(120%);
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+    }
+
+    .glass::before {
+      content: "";
+      position: absolute;
+      inset: -20%;
+      background: conic-gradient(from 80deg, transparent 0%, rgba(178, 222, 255, 0.33) 18%, transparent 35%, rgba(140, 194, 255, 0.2) 58%, transparent 80%);
+      filter: blur(20px);
+      animation: spin 14s linear infinite;
+      opacity: 0.75;
+    }
+
+    .glass::after {
+      content: "";
+      position: absolute;
+      width: 220%;
+      height: 42%;
+      left: -60%;
+      top: -10%;
+      background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.34) 48%, transparent 100%);
+      transform: rotate(-9deg);
+      animation: shimmer 7.8s ease-in-out infinite;
+    }
+
+    h1 {
+      margin: 0;
+      position: relative;
+      z-index: 2;
+      font-size: clamp(3rem, 10vw, 11rem);
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text);
+      text-shadow:
+        0 0 10px rgba(150, 205, 255, 0.9),
+        0 0 26px rgba(120, 193, 255, 0.8),
+        0 0 64px rgba(76, 148, 255, 0.42),
+        0 20px 34px rgba(0, 0, 0, 0.78);
+      animation: pulse 3.5s ease-in-out infinite;
+    }
+
+    h1 span {
+      display: inline-block;
+      animation: floatY 2.8s ease-in-out infinite;
+    }
+
+    h1 span:nth-child(2) {
+      animation-delay: 0.14s;
+    }
+
+    @keyframes drift {
+      0% { transform: perspective(700px) rotateX(52deg) translateY(18%) translateX(0); }
+      100% { transform: perspective(700px) rotateX(52deg) translateY(18%) translateX(-56px); }
+    }
+
+    @keyframes morph {
+      0% { border-radius: 42% 58% 63% 37% / 38% 41% 59% 62%; transform: translateY(0) rotate(0deg) scale(1); }
+      50% { border-radius: 64% 36% 46% 54% / 48% 60% 40% 52%; }
+      100% { border-radius: 51% 49% 31% 69% / 67% 40% 60% 33%; transform: translateY(-18px) rotate(8deg) scale(1.03); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.9; transform: translateY(0); }
+      50% { opacity: 1; transform: translateY(-4px); }
+    }
+
+    @keyframes floatY {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+
+    @keyframes shimmer {
+      0% { transform: translateX(-10%) rotate(-9deg); opacity: 0; }
+      35% { opacity: 0.8; }
+      100% { transform: translateX(120%) rotate(-9deg); opacity: 0; }
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <main class="scene">
+    <div class="blob a" aria-hidden="true"></div>
+    <div class="blob b" aria-hidden="true"></div>
+    <section class="glass" aria-label="hero">
+      <h1><span>HELLO</span> <span>WORD</span></h1>
+    </section>
+  </main>
+</body>
+</html>
