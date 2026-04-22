@@ -394,8 +394,20 @@ async function getMetaInfo() {
 }
 
 function buildDirectVlessNode(host, nodeName) {
-	const { hostname, port } = parseHostAndPort(host, PORT)
-	return `vless://${UUID}@${hostname}:${port}?encryption=none&security=none&type=ws&host=${hostname}&path=%2Fvless-argo%3Fed%3D2560#direct-${nodeName}`
+	const endpoint = parseDirectEndpoint(host, PORT)
+	const params = new URLSearchParams({
+		encryption: 'none',
+		security: endpoint.tls ? 'tls' : 'none',
+		type: 'ws',
+		host: endpoint.hostname,
+		path: '/vless-argo?ed=2560'
+	})
+
+	if (endpoint.tls) {
+		params.set('sni', endpoint.hostname)
+	}
+
+	return `vless://${UUID}@${endpoint.hostname}:${endpoint.port}?${params.toString()}#direct-${nodeName}`
 }
 
 function buildTunnelNodes(host, nodeName) {
@@ -405,21 +417,35 @@ function buildTunnelNodes(host, nodeName) {
 	]
 }
 
-function parseHostAndPort(value, defaultPort) {
+function parseDirectEndpoint(value, defaultPort) {
 	const normalized = String(value || '').trim()
 	if (!normalized) {
-		return { hostname: '', port: defaultPort }
+		return { hostname: '', port: defaultPort, tls: false }
 	}
 
-	const withProtocol = /^[a-z]+:\/\//i.test(normalized) ? normalized : `http://${normalized}`
+	if (!/^[a-z]+:\/\//i.test(normalized)) {
+		try {
+			const endpoint = new URL(`http://${normalized}`)
+			return {
+				hostname: endpoint.hostname,
+				port: endpoint.port ? Number(endpoint.port) : defaultPort,
+				tls: false
+			}
+		} catch {
+			return { hostname: normalized, port: defaultPort, tls: false }
+		}
+	}
+
 	try {
-		const endpoint = new URL(withProtocol)
+		const endpoint = new URL(normalized)
+		const tls = endpoint.protocol === 'https:'
 		return {
 			hostname: endpoint.hostname,
-			port: endpoint.port ? Number(endpoint.port) : defaultPort
+			port: endpoint.port ? Number(endpoint.port) : tls ? 443 : 80,
+			tls
 		}
 	} catch {
-		return { hostname: normalized, port: defaultPort }
+		return { hostname: normalized, port: defaultPort, tls: false }
 	}
 }
 
