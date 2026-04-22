@@ -12,12 +12,13 @@ const {
 	FILE_PATH,
 	SUB_PATH,
 	PORT,
+	HTTP_PORT,
+	HTTP_DOMAIN,
 	UUID,
 	NEZHA_SERVER,
 	NEZHA_KEY,
 	ARGO_DOMAIN,
 	ARGO_AUTH,
-	ARGO_PORT,
 	CFIP,
 	CFPORT,
 	NAME,
@@ -57,7 +58,7 @@ function deleteNodes() {
 		}
 
 		const decoded = Buffer.from(fileContent, 'base64').toString('utf-8')
-		const nodes = decoded.split('\n').filter((line) => /(vless|vmess|trojan|hysteria2|tuic):\/\//.test(line))
+		const nodes = decoded.split('\n').filter((line) => /(vless|trojan|hysteria2|tuic):\/\//.test(line))
 
 		if (nodes.length === 0) return
 
@@ -96,27 +97,19 @@ async function generateConfig() {
 		log: { access: '/dev/null', error: '/dev/null', loglevel: 'none' },
 		inbounds: [
 			{
-				port: ARGO_PORT,
+				port: PORT,
 				protocol: 'vless',
 				settings: {
 					clients: [{ id: UUID, flow: 'xtls-rprx-vision' }],
 					decryption: 'none',
 					fallbacks: [
-						{ dest: 3001 },
-						{ path: `/${SUB_PATH}`, dest: Number(PORT) },
+						{ path: `/${SUB_PATH}`, dest: Number(HTTP_PORT) },
 						{ path: '/vless-argo', dest: 3002 },
-						{ path: '/vmess-argo', dest: 3003 },
-						{ path: '/trojan-argo', dest: 3004 }
+						{ path: '/trojan-argo', dest: 3004 },
+						{ dest: Number(HTTP_PORT) }
 					]
 				},
 				streamSettings: { network: 'tcp' }
-			},
-			{
-				port: 3001,
-				listen: '127.0.0.1',
-				protocol: 'vless',
-				settings: { clients: [{ id: UUID }], decryption: 'none' },
-				streamSettings: { network: 'tcp', security: 'none' }
 			},
 			{
 				port: 3002,
@@ -124,14 +117,6 @@ async function generateConfig() {
 				protocol: 'vless',
 				settings: { clients: [{ id: UUID, level: 0 }], decryption: 'none' },
 				streamSettings: { network: 'ws', security: 'none', wsSettings: { path: '/vless-argo' } },
-				sniffing: { enabled: true, destOverride: ['http', 'tls', 'quic'], metadataOnly: false }
-			},
-			{
-				port: 3003,
-				listen: '127.0.0.1',
-				protocol: 'vmess',
-				settings: { clients: [{ id: UUID, alterId: 0 }] },
-				streamSettings: { network: 'ws', wsSettings: { path: '/vmess-argo' } },
 				sniffing: { enabled: true, destOverride: ['http', 'tls', 'quic'], metadataOnly: false }
 			},
 			{
@@ -284,7 +269,7 @@ async function downloadFilesAndRun() {
 		} else if (ARGO_AUTH.match(/TunnelSecret/)) {
 			args = `tunnel --edge-ip-version auto --config ${FILE_PATH}/tunnel.yml run`
 		} else {
-			args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${bootLogPath} --loglevel info --url http://localhost:${ARGO_PORT}`
+			args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${bootLogPath} --loglevel info --url http://localhost:${PORT}`
 		}
 
 		try {
@@ -315,7 +300,7 @@ function argoType() {
   
   ingress:
     - hostname: ${ARGO_DOMAIN}
-      service: http://localhost:${ARGO_PORT}
+      service: http://localhost:${PORT}
       originRequest:
         noTLSVerify: true
     - service: http_status:404
@@ -376,7 +361,7 @@ async function extractDomains(retryCount = 0) {
 		fs.unlinkSync(bootLogPath)
 		await killBotProcess()
 		await new Promise((resolve) => setTimeout(resolve, 3000))
-		const args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${bootLogPath} --loglevel info --url http://localhost:${ARGO_PORT}`
+		const args = `tunnel --edge-ip-version auto --no-autoupdate --protocol http2 --logfile ${bootLogPath} --loglevel info --url http://localhost:${PORT}`
 		try {
 			await exec(`nohup ${botPath} ${args} >/dev/null 2>&1 &`)
 			console.log(`${botName} 已启动`)
@@ -408,41 +393,60 @@ async function getMetaInfo() {
 	return 'Unknown'
 }
 
+function buildDirectVlessNode(host, nodeName) {
+	const { hostname, port } = parseHostAndPort(host, PORT)
+	return `vless://${UUID}@${hostname}:${port}?encryption=none&security=none&type=ws&host=${hostname}&path=%2Fvless-argo%3Fed%3D2560#direct-${nodeName}`
+}
+
+function buildTunnelNodes(host, nodeName) {
+	return [
+		`vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${host}&fp=firefox&type=ws&host=${host}&path=%2Fvless-argo%3Fed%3D2560#${nodeName}-argo-vless`,
+		`trojan://${UUID}@${CFIP}:${CFPORT}?security=tls&sni=${host}&fp=firefox&type=ws&host=${host}&path=%2Ftrojan-argo%3Fed%3D2560#${nodeName}-argo-trojan`
+	]
+}
+
+function parseHostAndPort(value, defaultPort) {
+	const normalized = String(value || '').trim()
+	if (!normalized) {
+		return { hostname: '', port: defaultPort }
+	}
+
+	const withProtocol = /^[a-z]+:\/\//i.test(normalized) ? normalized : `http://${normalized}`
+	try {
+		const endpoint = new URL(withProtocol)
+		return {
+			hostname: endpoint.hostname,
+			port: endpoint.port ? Number(endpoint.port) : defaultPort
+		}
+	} catch {
+		return { hostname: normalized, port: defaultPort }
+	}
+}
+
 // 生成 list 和 sub
 async function generateLinks(argoDomain) {
 	const ISP = await getMetaInfo()
 	const nodeName = NAME ? `${NAME}-${ISP}` : ISP
+	const nodes = []
+
+	if (HTTP_DOMAIN) {
+		nodes.push(buildDirectVlessNode(HTTP_DOMAIN, nodeName))
+	}
+
+	if (argoDomain) {
+		nodes.push(...buildTunnelNodes(argoDomain, nodeName))
+	}
+
 	return new Promise((resolve) => {
 		setTimeout(() => {
-			const VMESS = {
-				v: '2',
-				ps: `${nodeName}`,
-				add: CFIP,
-				port: CFPORT,
-				id: UUID,
-				aid: '0',
-				scy: 'auto',
-				net: 'ws',
-				type: 'none',
-				host: argoDomain,
-				path: '/vmess-argo?ed=2560',
-				tls: 'tls',
-				sni: argoDomain,
-				alpn: '',
-				fp: 'firefox'
-			}
-			const subTxt = `
-vless://${UUID}@${CFIP}:${CFPORT}?encryption=none&security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=%2Fvless-argo%3Fed%3D2560#${nodeName}
-
-vmess://${Buffer.from(JSON.stringify(VMESS)).toString('base64')}
-
-trojan://${UUID}@${CFIP}:${CFPORT}?security=tls&sni=${argoDomain}&fp=firefox&type=ws&host=${argoDomain}&path=%2Ftrojan-argo%3Fed%3D2560#${nodeName}
-    `
-			console.log(Buffer.from(subTxt).toString('base64'))
-			fs.writeFileSync(subPath, Buffer.from(subTxt).toString('base64'))
+			const listTxt = nodes.join('\n\n')
+			const encodedSub = Buffer.from(listTxt).toString('base64')
+			console.log(encodedSub)
+			fs.writeFileSync(listPath, listTxt)
+			fs.writeFileSync(subPath, encodedSub)
 			console.log(`订阅文件已写入：${FILE_PATH}/sub.txt`)
 			uploadNodes()
-			resolve(subTxt)
+			resolve(listTxt)
 		}, 2000)
 	})
 }
@@ -474,7 +478,7 @@ async function uploadNodes() {
 	} else if (UPLOAD_URL) {
 		if (!fs.existsSync(listPath)) return
 		const content = fs.readFileSync(listPath, 'utf-8')
-		const nodes = content.split('\n').filter((line) => /(vless|vmess|trojan|hysteria2|tuic):\/\//.test(line))
+		const nodes = content.split('\n').filter((line) => /(vless|trojan|hysteria2|tuic):\/\//.test(line))
 
 		if (nodes.length === 0) return
 

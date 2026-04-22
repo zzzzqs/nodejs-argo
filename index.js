@@ -2,7 +2,7 @@ const express = require('express')
 const fs = require('fs')
 const path = require('path')
 
-const { PORT, SUB_PATH } = require('./config')
+const { HTTP_PORT, SUB_PATH } = require('./config')
 const { startCore, subPath } = require('./runtime')
 
 const app = express()
@@ -34,4 +34,4 @@ app.get(`/${SUB_PATH}`, (req, res) => {
 	}
 })
 
-app.listen(PORT, () => console.log(`HTTP 服务已启动，监听端口：${PORT}`))
+app.listen(HTTP_PORT, () => console.log(`HTTP 伪装站点已启动，内部监听端口：${HTTP_PORT}`))

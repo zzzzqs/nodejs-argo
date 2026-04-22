@@ -31,12 +31,14 @@ const PROJECT_URL = process.env.PROJECT_URL || ''
 const AUTO_ACCESS = String(process.env.AUTO_ACCESS || '').toLowerCase() === 'true'
 const FILE_PATH = process.env.FILE_PATH || '.tmp'
 const SUB_PATH = process.env.SUB_PATH || '954932'
-const PORT = process.env.SERVER_PORT || process.env.PORT || 3000
+const PORT = Number(process.env.SERVER_PORT || process.env.PORT || process.env.ARGO_PORT || 3000)
+const HTTP_PORT = Number(process.env.HTTP_PORT || 3001)
+const HTTP_DOMAIN = String(process.env.HTTP_DOMAIN || '').trim()
 const NEZHA_SERVER = process.env.NEZHA_SERVER || ''
 const NEZHA_KEY = process.env.NEZHA_KEY || ''
 const ARGO_DOMAIN = process.env.ARGO_DOMAIN || ''
 const ARGO_AUTH = process.env.ARGO_AUTH || ''
-const ARGO_PORT = process.env.ARGO_PORT || 8001
+const ARGO_PORT = PORT
 const CFIP = process.env.CFIP || 'saas.sin.fan'
 const CFPORT = process.env.CFPORT || 443
 const NAME = process.env.NAME || ''
@@ -68,6 +70,8 @@ module.exports = {
 	FILE_PATH,
 	SUB_PATH,
 	PORT,
+	HTTP_PORT,
+	HTTP_DOMAIN,
 	UUID,
 	NEZHA_SERVER,
 	NEZHA_KEY,
