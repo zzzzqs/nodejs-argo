@@ -22,6 +22,26 @@ jobs:
             - name: Checkout repository
               uses: actions/checkout@v4
 
+            - name: Compute image name
+              id: image
+              shell: bash
+              run: |
+                  if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+                    ref="${GITHUB_HEAD_REF}"
+                  else
+                    ref="${GITHUB_REF_NAME}"
+                  fi
+
+                  safe_ref="$(echo "${ref}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]/-/g')"
+
+                  if [[ "${safe_ref}" == "main" ]]; then
+                    image_name="nodejsargo"
+                  else
+                    image_name="nodejsargo-${safe_ref}"
+                  fi
+
+                  echo "image_name=${image_name}" >> "${GITHUB_OUTPUT}"
+
             - name: Log in to GitHub Container Registry
               uses: docker/login-action@v3
               with:
@@ -39,7 +59,7 @@ jobs:
                   push: true
                   platforms: linux/amd64,linux/arm64
                   tags: |
-                      ghcr.io/${{ github.repository_owner }}/nodejsargo:latest
+                      ghcr.io/${{ github.repository_owner }}/${{ steps.image.outputs.image_name }}:latest
                   labels: |
                       org.opencontainers.image.source=https://github.com/${{ github.repository }}
                       org.opencontainers.image.description=HTTP Server
